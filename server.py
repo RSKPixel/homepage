@@ -303,12 +303,31 @@ def tailscale_status():
 
 
 def ntp_synced():
-    v = run(["timedatectl", "show", "-p", "NTPSynchronized", "--value"]).strip()
-    return {"yes": True, "no": False}.get(v)
+    # ask the kernel directly (read-only adjtimex); timedatectl won't run in a container.
+    # The clock state is TIME_ERROR (5) while the system clock is unsynchronised.
+    try:
+        import ctypes, ctypes.util
+        libc = ctypes.CDLL(ctypes.util.find_library("c"), use_errno=True)
+        state = libc.adjtimex(ctypes.create_string_buffer(512))
+    except (OSError, AttributeError):
+        return None
+    return None if state < 0 else state != 5
 
 
 def users_logged_in():
-    # Ubuntu 26.04 no longer writes utmp, so `who` is always empty; ask logind instead
+    # Ubuntu 26.04 no longer writes utmp, so `who` is always empty. Read logind's
+    # session files instead (loginctl refuses to run inside a container).
+    sessions = Path(host("/run/systemd/sessions"))
+    if sessions.is_dir():
+        users = set()
+        for f in sessions.iterdir():
+            try:
+                kv = dict(l.split("=", 1) for l in f.read_text().splitlines() if "=" in l)
+            except OSError:
+                continue
+            if kv.get("CLASS") == "user" and kv.get("STATE") in ("active", "online"):
+                users.add(kv.get("USER"))
+        return len(users)
     out = run(["loginctl", "list-sessions", "--no-legend"])
     if out.strip():
         return len({f[2] for f in map(str.split, out.splitlines()) if len(f) > 5 and f[5] == "user"})
