@@ -177,16 +177,16 @@
 
   .svc-body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; margin: 0 -6px; padding: 0 6px 4px; }
   .group h3 { margin: 14px 0 7px; }
-  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 8px; }
+  .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .tile {
-    display: flex; align-items: center; gap: 11px; padding: 7px 12px 7px 8px; border-radius: 12px;
+    display: flex; align-items: center; gap: 12px; padding: 8px 14px 8px 9px; border-radius: 12px;
     border: 1px solid var(--line); background: var(--soft); min-width: 0;
     transition: transform .15s ease, border-color .15s, box-shadow .15s, background .15s;
   }
   a.tile:hover, a.tile.sel { transform: translateY(-1px); border-color: var(--accent); background: var(--card); box-shadow: 0 0 0 3px var(--accent-soft); }
   .tile.off { opacity: .5; }
   .avatar {
-    width: 32px; height: 32px; border-radius: 9px; flex: none; display: grid; place-items: center;
+    width: 36px; height: 36px; border-radius: 10px; flex: none; display: grid; place-items: center;
     font-weight: 700; font-size: 14.5px; letter-spacing: -.01em;
     background: hsl(var(--h) var(--tile-c) var(--tile-l)); color: hsl(var(--h) 55% var(--tile-ink-l));
   }
