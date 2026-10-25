@@ -1,0 +1,33 @@
+name: homepage
+
+services:
+  homepage:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: homepage
+    # The page reports on the host, not the container: share the host's network
+    # (IPs, ports, traffic) and process table, and mount its filesystem read-only.
+    # With host networking the port is set by HOMEPAGE_PORT, not a ports: mapping.
+    network_mode: host
+    pid: host
+    environment:
+      HOMEPAGE_PORT: ${HOMEPAGE_PORT:-8088}
+      HOST_ROOT: /host
+      # timedatectl / loginctl talk to the host's systemd over D-Bus
+      DBUS_SYSTEM_BUS_ADDRESS: unix:path=/host/run/dbus/system_bus_socket
+    volumes:
+      - /:/host:ro,rslave
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /run/udev:/run/udev:ro
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python3 -c \"import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ['HOMEPAGE_PORT'] + '/api/stats', timeout=3)\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

@@ -1,0 +1,11 @@
+[Unit]
+Description=Homeserver homepage (live MOTD dashboard)
+After=network-online.target docker.service
+
+[Service]
+ExecStart=/usr/bin/python3 %h/dev/homepage/server.py
+Environment=HOMEPAGE_PORT=8188
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

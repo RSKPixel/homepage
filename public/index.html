@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>homeserver</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7' fill='%234f46e5'/><circle cx='8' cy='8' r='3' fill='white'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  :root {
+    --bg: #f3f1ec;
+    --card: #ffffff;
+    --soft: #f7f6f2;
+    --ink: #1b1a17;
+    --ink-2: #57544d;
+    --ink-3: #9a968c;
+    --line: #e8e4db;
+    --accent: #4f46e5;
+    --accent-soft: #4f46e512;
+    --ok: #16a34a; --warn: #d97706; --bad: #dc2626;
+    --track: #ece9e1;
+    --shadow: 0 1px 2px #1b1a170a, 0 10px 30px -18px #1b1a1726;
+    --tile-l: 93%; --tile-c: 40%; --tile-ink-l: 32%;
+    --g1: #0891b2; --g2: #2563eb; --g3: #4f46e5; --g4: #9333ea;
+    /* web fonts first so macOS and Windows render identically */
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, ui-monospace, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0e0f11; --card: #16171a; --soft: #1b1c20;
+      --ink: #f2f1ee; --ink-2: #b4b1a9; --ink-3: #6f6c66; --line: #25262b;
+      --accent: #8b85ff; --accent-soft: #8b85ff1a;
+      --ok: #34d399; --warn: #fbbf24; --bad: #f87171;
+      --track: #26272c; --shadow: 0 1px 0 #ffffff08 inset, 0 10px 30px -14px #000;
+      --tile-l: 22%; --tile-c: 30%; --tile-ink-l: 78%;
+      --g1: #22d3ee; --g2: #38bdf8; --g3: #818cf8; --g4: #c084fc;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0e0f11; --card: #16171a; --soft: #1b1c20;
+    --ink: #f2f1ee; --ink-2: #b4b1a9; --ink-3: #6f6c66; --line: #25262b;
+    --accent: #8b85ff; --accent-soft: #8b85ff1a;
+    --ok: #34d399; --warn: #fbbf24; --bad: #f87171;
+    --track: #26272c; --shadow: 0 1px 0 #ffffff08 inset, 0 10px 30px -14px #000;
+    --tile-l: 22%; --tile-c: 30%; --tile-ink-l: 78%;
+    --g1: #22d3ee; --g2: #38bdf8; --g3: #818cf8; --g4: #c084fc;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  .svc-body, .side { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+  html, body { margin: 0; background: var(--bg); }
+  body {
+    font: 16px/1.45 var(--sans); color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    padding: 20px 16px 24px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; color: inherit; }
+  .num { font-variant-numeric: tabular-nums; }
+  .mono { font-family: var(--mono); font-size: .9em; }
+  .muted { color: var(--ink-3); }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+  .label { font-size: 13.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+
+  /* ── top bar ── */
+  .top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; zoom: .85; }
+  .brand .text { min-width: 0; }
+  .brand .sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-top: 8px; }
+  /* retro ANSI-shadow banner: gradient blocks, dim box-drawing "shadow", CRT scanlines */
+  .ascii {
+    position: relative; margin: 0; font: 700 9.5px/1.05 var(--mono); letter-spacing: 0;
+    white-space: pre; width: max-content;
+    background: linear-gradient(100deg, var(--g1) 0%, var(--g2) 38%, var(--g3) 70%, var(--g4) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .ascii .cur { -webkit-text-fill-color: var(--g4); animation: blink 1.1s steps(1) infinite; }
+  .wordmark {
+    margin: 0; font-size: clamp(24px, 3.2vw, 37px); font-weight: 800; letter-spacing: -.045em; line-height: .95;
+    background: linear-gradient(100deg, var(--g1) 0%, var(--g2) 38%, var(--g3) 70%, var(--g4) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    padding-bottom: .06em;
+  }
+  .wordmark .cur {
+    display: inline-block; width: .42em; height: .1em; margin-left: .06em; vertical-align: baseline;
+    background: var(--g4); border-radius: 2px; animation: blink 1.1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* rack illustration */
+  .rack { width: 54px; height: 62px; flex: none; overflow: visible; }  /* resized to the banner by sizeRack() */
+  .rack .chassis { fill: var(--card); stroke: var(--line); stroke-width: 1.5; }
+  .rack .unit { fill: var(--soft); stroke: var(--line); }
+  .rack .vent { stroke: var(--ink-3); stroke-width: 1.4; stroke-linecap: round; opacity: .45; }
+  .rack .foot { fill: var(--line); }
+  .rack .led { fill: var(--ok); }
+  .rack .led.act { fill: var(--accent); animation: flicker var(--act, 1.6s) steps(2, jump-none) infinite; }
+  .rack .led.act.b { animation-delay: calc(var(--act, 1.6s) * -.37); }
+  .rack .led.act.c { animation-delay: calc(var(--act, 1.6s) * -.71); }
+  .rack .led.st { fill: var(--ok); }
+  .rack .led.st.warn { fill: var(--warn); }
+  .rack .led.st.bad { fill: var(--bad); animation: blink .8s steps(1) infinite; }
+  .rack .glow { filter: drop-shadow(0 0 2.5px currentColor); }
+  @keyframes flicker { 0% { opacity: 1; } 100% { opacity: .2; } }
+  @media (prefers-reduced-motion: reduce) { .rack .led, .wordmark .cur, .ascii .cur { animation: none !important; } }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+    padding: 4px 11px 4px 9px; border-radius: 999px; font-size: 14.5px; font-weight: 600;
+    background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--ok);
+  }
+  .pill.warn { background: color-mix(in srgb, var(--warn) 14%, transparent); color: var(--warn); }
+  .pill.bad { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); }
+  .pill i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .top .os { color: var(--ink-3); }
+  .top .clock { margin-left: auto; display: flex; align-items: baseline; gap: 12px; white-space: nowrap; }
+  .top .clock b { font-size: 36px; font-weight: 400; letter-spacing: -.02em; }
+  .top .clock span { color: var(--ink-2); }
+
+  /* ── stat strip ── */
+  .strip { display: grid; grid-template-columns: 1.7fr repeat(5, minmax(0, 1fr)); }
+  .stat { padding: 16px 20px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .stat + .stat { border-left: 1px solid var(--line); }
+  .stat .v { font-size: 32px; font-weight: 650; letter-spacing: -.035em; line-height: 1.05; white-space: nowrap; }
+  .stat .v small { font-size: 17px; font-weight: 500; color: var(--ink-3); margin-left: 1px; letter-spacing: 0; }
+  .stat .s { font-size: 14.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .meter { height: 5px; border-radius: 99px; background: var(--track); overflow: hidden; }
+  .meter span { display: block; height: 100%; border-radius: inherit; transition: width .8s cubic-bezier(.2,.8,.2,1); }
+  .cpu-row { display: flex; align-items: flex-end; gap: 16px; }
+  .cpu-chart { flex: 1; min-width: 0; height: 36px; display: block; }
+  .cpu-chart .area { fill: var(--accent-soft); }
+  .cpu-chart .stroke { fill: none; stroke: var(--accent); stroke-width: 1.6; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+  @media (max-width: 1100px) {
+    .strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .stat:nth-child(4) { border-left: 0; }
+    .stat:nth-child(n+4) { border-top: 1px solid var(--line); }
+  }
+  @media (max-width: 600px) {
+    .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .stat:first-child { grid-column: 1 / -1; }
+    .stat { border-left: 0 !important; border-top: 1px solid var(--line); }
+    .stat:first-child { border-top: 0; }
+    .stat:nth-child(odd):not(:first-child) { border-left: 1px solid var(--line) !important; }
+  }
+
+  /* ── main ── */
+  .main { display: grid; grid-template-columns: minmax(0, 1fr) 340px 340px; gap: 16px; align-items: start; }
+  /* medium widths: storage and system stack in one column beside services */
+  @media (max-width: 1360px) {
+    .main { grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: auto minmax(0, 1fr); }
+    .services { grid-row: 1 / span 2; }
+  }
+  @media (max-width: 1000px) {
+    .main { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; }
+    .services { grid-row: auto; }
+  }
+
+  .services { padding: 18px 20px; display: flex; flex-direction: column; min-height: 0; }
+  .svc-head { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .svc-head h2 { margin: 0; font-size: 19px; letter-spacing: -.015em; }
+  .svc-head h2 span { color: var(--ink-3); font-weight: 500; margin-left: 6px; font-size: 16px; }
+  .search {
+    display: flex; align-items: center; gap: 8px; flex: 0 1 260px; min-width: 0;
+    background: var(--soft); border: 1px solid var(--line); border-radius: 9px; padding: 6px 10px;
+  }
+  .search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font: inherit; color: var(--ink); }
+  .search input::placeholder { color: var(--ink-3); }
+  .kbd { font: 13px var(--mono); color: var(--ink-3); border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; }
+
+  .svc-body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; margin: 0 -6px; padding: 0 6px 4px; }
+  .group h3 { margin: 14px 0 7px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 8px; }
+  .tile {
+    display: flex; align-items: center; gap: 11px; padding: 7px 12px 7px 8px; border-radius: 12px;
+    border: 1px solid var(--line); background: var(--soft); min-width: 0;
+    transition: transform .15s ease, border-color .15s, box-shadow .15s, background .15s;
+  }
+  a.tile:hover, a.tile.sel { transform: translateY(-1px); border-color: var(--accent); background: var(--card); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .tile.off { opacity: .5; }
+  .avatar {
+    width: 32px; height: 32px; border-radius: 9px; flex: none; display: grid; place-items: center;
+    font-weight: 700; font-size: 14.5px; letter-spacing: -.01em;
+    background: hsl(var(--h) var(--tile-c) var(--tile-l)); color: hsl(var(--h) 55% var(--tile-ink-l));
+  }
+  .tile .meta { min-width: 0; flex: 1; line-height: 1.25; }
+  .tile .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .port { font: 13.5px var(--mono); color: var(--ink-3); }
+  .tile .st { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--ink-3); }
+  .tile .st.up { background: var(--ok); }
+  .tile .st.bad { background: var(--bad); box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 25%, transparent); }
+
+  .backends { display: flex; flex-wrap: wrap; gap: 5px; }
+  .bk {
+    display: inline-flex; align-items: center; gap: 6px; font: 13.5px var(--mono); color: var(--ink-2);
+    padding: 2px 8px; border-radius: 7px; background: var(--soft); border: 1px solid var(--line);
+  }
+  .bk i { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); }
+  .bk i.up { background: var(--ok); } .bk i.bad { background: var(--bad); }
+  [hidden] { display: none !important; }
+  .empty { color: var(--ink-3); padding: 20px 0; }
+
+  .side { padding: 18px 20px; display: flex; flex-direction: column; gap: 4px; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+  .side .label { margin-bottom: 10px; }
+  .drive + .drive { margin-top: 12px; }
+  .drive .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+  .drive .name { font: 600 15px var(--mono); }
+  .drive .pct { font-weight: 650; }
+  .drive .sub { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; color: var(--ink-3); margin-top: 5px; }
+  #unmounted:empty { display: none; }
+  #unmounted .label { margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .um + .um { margin-top: 10px; }
+  .um { display: flex; align-items: flex-start; gap: 10px; }
+  .um .ico {
+    width: 30px; height: 30px; border-radius: 8px; flex: none; display: grid; place-items: center;
+    border: 1.5px dashed var(--ink-3); color: var(--ink-3);
+  }
+  .um .meta { min-width: 0; flex: 1; line-height: 1.3; }
+  .um .top { display: flex; justify-content: space-between; gap: 8px; }
+  .um .name { font: 600 15px var(--mono); }
+  .um .size { font-weight: 650; white-space: nowrap; }
+  .um .sub { font-size: 14px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tag { font: 600 13px var(--mono); padding: 0 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); }
+  .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 5px 16px; margin: 0; }
+  #facts .facts + h4 { margin-top: 12px; }
+  #facts h4 small { font: 13.5px var(--mono); color: var(--ink-3); font-weight: 400; }
+  #facts h4 {
+    margin: 0 0 8px; font-size: 14.5px; font-weight: 600; color: var(--ink-2);
+    display: flex; align-items: center; gap: 8px;
+  }
+  #facts h4::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .rate { display: inline-flex; gap: 8px; }
+  .rate b { font-weight: 500; }
+  .rate i { font-style: normal; color: var(--ink-3); }
+  .facts dt { color: var(--ink-3); }
+  .facts dd { margin: 0; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .copy { cursor: pointer; border-bottom: 1px dashed var(--line); }
+  .copy:hover { color: var(--accent); border-color: var(--accent); }
+
+  footer { display: flex; flex-wrap: wrap; gap: 6px 20px; justify-content: space-between; color: var(--ink-3); font-size: 14.5px; }
+  footer a:hover, .theme:hover { color: var(--ink); }
+  .theme { background: none; border: 0; cursor: pointer; color: var(--ink-3); padding: 0; }
+  .tabs { display: none; }
+
+  /* phones and tablets: a single screen with no page scroll.
+     Header + stats on top, the three panels behind tabs filling the rest. */
+  @media (max-width: 1000px) {
+    html, body { height: 100%; overflow: hidden; }
+    body { padding: 14px 14px calc(10px + env(safe-area-inset-bottom, 0px)); gap: 10px; }
+    .top { flex-wrap: nowrap; }
+    .top .clock { display: none; }
+    .top .os { display: none; }
+
+    .strip { grid-template-columns: repeat(3, minmax(0, 1fr)); flex: none; }
+    .stat { padding: 8px 11px 10px; gap: 4px; border: 0 !important; }
+    .stat:first-child { grid-column: auto; }
+    .stat:nth-child(n+4) { border-top: 1px solid var(--line) !important; }
+    .stat:not(:nth-child(3n+1)) { border-left: 1px solid var(--line) !important; }
+    .stat .label { font-size: 11px; }
+    .stat .v { font-size: 21px; }
+    .stat .v small { font-size: 12px; }
+    .stat .s { display: none; }
+    .meter { height: 4px; }
+    .cpu-chart { display: none; }
+
+    .tabs {
+      display: flex; flex: none; gap: 4px; padding: 4px;
+      background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    }
+    .tabs button {
+      flex: 1; border: 0; background: none; padding: 7px 0; border-radius: 9px;
+      font-size: 14px; font-weight: 600; color: var(--ink-3); cursor: pointer;
+    }
+    .tabs button[aria-selected="true"] { background: var(--ink); color: var(--bg); }
+
+    .main { flex: 1; min-height: 0; display: block; }
+    .main > [data-panel] { height: 100%; max-height: 100%; }
+    .main[data-tab="services"] > :not([data-panel="services"]),
+    .main[data-tab="storage"] > :not([data-panel="storage"]),
+    .main[data-tab="system"] > :not([data-panel="system"]) { display: none; }
+    .services, .side { padding: 14px; font-size: 14px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+    .svc-head h2 { font-size: 17px; }
+    .svc-head h2 span { font-size: 13px; }
+    .tile .name { font-size: 14px; }
+    .tile .port { font-size: 11.5px; }
+    .bk { font-size: 11.5px; }
+    .side .label, .group h3 { font-size: 11.5px; }
+    #facts h4 { font-size: 13px; }
+    .drive .name, .um .name { font-size: 13px; }
+    .drive .sub, .um .sub { font-size: 12px; }
+    .svc-head { margin-bottom: 0; }
+    .search { flex: 1 1 100%; }
+    .kbd { display: none; }
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+    .tile { padding: 6px 8px 6px 6px; gap: 8px; }
+    .avatar { width: 28px; height: 28px; font-size: 12px; border-radius: 8px; }
+    .group h3 { margin: 12px 0 6px; }
+
+    footer { flex: none; font-size: 12px; }
+  }
+
+  .toast {
+    position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 16px);
+    background: var(--ink); color: var(--bg); padding: 7px 13px; border-radius: 9px; font-size: 15px;
+    opacity: 0; transition: .2s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+  /* one screen, no page scroll, on desktop-sized windows */
+  @media (min-width: 1001px) and (min-height: 480px) {
+    html, body { height: 100%; overflow: hidden; }
+    body { padding: clamp(18px, 3vh, 32px) clamp(24px, 3vw, 48px) clamp(14px, 2vh, 22px); gap: clamp(12px, 2vh, 20px); }
+    .main { flex: 1; min-height: 0; }
+    .main { align-items: stretch; }
+    .services, .side { max-height: 100%; height: 100%; }
+    /* fit-to-window scaling handles small screens, so keep all three columns */
+    .main { grid-template-columns: minmax(0, 1fr) 340px 340px; grid-template-rows: none; }
+    .services { grid-row: auto; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="brand">
+    <svg class="rack" id="rack" viewBox="0 0 62 72" aria-hidden="true">
+      <rect class="chassis" x="1" y="1" width="60" height="64" rx="8"/>
+      <g id="units"></g>
+      <rect class="foot" x="9" y="65" width="8" height="5" rx="1.5"/>
+      <rect class="foot" x="45" y="65" width="8" height="5" rx="1.5"/>
+    </svg>
+    <div class="text">
+      <h1 style="margin:0"><pre class="ascii" id="hostname" aria-label="homeserver">homeserver</pre></h1>
+      <div class="sub">
+        <span class="pill" id="health"><i></i><span>Connecting…</span></span>
+        <span class="os" id="osline"></span>
+      </div>
+    </div>
+  </div>
+  <div class="clock"><b class="num" id="time">--:--</b><span id="date"></span></div>
+</header>
+
+<section class="card strip">
+  <div class="stat">
+    <div class="label">CPU</div>
+    <div class="cpu-row">
+      <div class="v num" id="cpu">–<small>%</small></div>
+      <svg class="cpu-chart" id="cpuChart" viewBox="0 0 100 40" preserveAspectRatio="none" aria-label="CPU usage, last 5 minutes"></svg>
+    </div>
+    <div class="s" id="cpuSub">&nbsp;</div>
+  </div>
+  <div class="stat" id="sMem"></div>
+  <div class="stat" id="sDisk"></div>
+  <div class="stat" id="sTemp"></div>
+  <div class="stat" id="sLoad"></div>
+  <div class="stat" id="sUp"></div>
+</section>
+
+<nav class="tabs" id="tabs" role="tablist">
+  <button role="tab" data-tab="services" aria-selected="true">Services</button>
+  <button role="tab" data-tab="storage" aria-selected="false">Storage</button>
+  <button role="tab" data-tab="system" aria-selected="false">System</button>
+</nav>
+
+<section class="main" id="main" data-tab="services">
+  <div class="card services" data-panel="services">
+    <div class="svc-head">
+      <h2>Services<span id="svcCount"></span></h2>
+      <label class="search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="color:var(--ink-3)"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" placeholder="Search" autocomplete="off" spellcheck="false">
+        <span class="kbd">/</span>
+      </label>
+    </div>
+    <div class="svc-body" id="svcBody"></div>
+  </div>
+
+  <aside class="card side" data-panel="storage">
+    <div class="label">Storage</div>
+    <div id="drives"></div>
+    <div id="unmounted"></div>
+  </aside>
+  <aside class="card side" data-panel="system">
+    <div class="label">System</div>
+    <div id="facts"></div>
+  </aside>
+</section>
+
+<footer>
+  <span id="updated">&nbsp;</span>
+  <span><a href="/v1/">Classic view</a> · <button class="theme" id="themeBtn">Theme: auto</button></span>
+</footer>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
+const level = p => p < 70 ? "ok" : p < 90 ? "warn" : "bad";
+const tempLevel = t => t < 70 ? "ok" : t < 85 ? "warn" : "bad";
+const color = l => `var(--${l})`;
+
+function bytes(n) {
+  const u = ["B","KB","MB","GB","TB","PB"]; let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return (n >= 100 || i === 0 ? Math.round(n) : n.toFixed(1)) + " " + u[i];
+}
+function uptime(s) {
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
+}
+function meter(pct, lvl) { return `<div class="meter"><span style="width:${Math.min(pct, 100)}%;background:${color(lvl)}"></span></div>`; }
+function stat(el, label, value, unit, sub, pct, lvl) {
+  el.innerHTML = `<div class="label">${label}</div><div class="v num">${value}<small>${unit}</small></div>
+    ${pct == null ? "" : meter(pct, lvl)}<div class="s">${sub}</div>`;
+}
+function hue(str) { let h = 0; for (const ch of str) h = (h * 31 + ch.charCodeAt(0)) % 360; return h; }
+function initials(label) {
+  const words = label.replace(/([a-z])([A-Z])/g, "$1 $2").split(/[\s_\-]+/).filter(Boolean);
+  return (words.length > 1 ? words[0][0] + words[1][0] : label.slice(0, 2)).toUpperCase();
+}
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 1400); }
+function copy(text) {
+  const done = () => toast(`Copied ${text}`);
+  if (navigator.clipboard && isSecureContext) return navigator.clipboard.writeText(text).then(done);
+  const ta = Object.assign(document.createElement("textarea"), { value: text });
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); done(); } catch {}
+  ta.remove();
+}
+
+function drawCpu(hist) {
+  const svg = $("cpuChart"), pts = hist.slice(-60);
+  if (pts.length < 2) { svg.innerHTML = ""; return; }
+  const n = 59, top = Math.max(20, Math.ceil(Math.max(...pts) / 20) * 20);
+  const xy = pts.map((v, i) => [((n - (pts.length - 1) + i) / n) * 100, 39 - (v / top) * 37]);
+  const line = xy.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(2)},${y.toFixed(2)}`).join("");
+  svg.innerHTML = `<path class="area" d="${line}L100,40L${xy[0][0].toFixed(2)},40Z"/><path class="stroke" d="${line}"/>`;
+}
+
+/* ── services ── */
+const GROUPS = [["media", "Media"], ["apps", "Apps"], ["infra", "Infrastructure"], ["other", "Other"]];
+let selIndex = 0, lastSvcKey = "";
+
+function tile(c, host) {
+  const up = c.state === "running", bad = c.state === "unhealthy";
+  return `<a class="tile${up || bad ? "" : " off"}" href="${c.scheme}://${host}:${c.port}/" target="_blank" rel="noopener"
+      data-q="${esc((c.label + " " + c.name + " " + c.port).toLowerCase())}" title="${esc(c.name + " — " + c.status)}">
+    <span class="avatar" style="--h:${hue(c.label)}">${esc(initials(c.label))}</span>
+    <span class="meta"><div class="name">${esc(c.label)}</div><div class="port">${c.scheme === "https" ? "https " : ""}:${c.port}</div></span>
+    <span class="st ${bad ? "bad" : up ? "up" : ""}"></span></a>`;
+}
+
+function renderServices(list) {
+  const visible = list.filter(c => !c.hidden);
+  $("svcCount").textContent = `${visible.filter(c => c.state === "running").length} of ${visible.length} running`;
+  const key = JSON.stringify(visible.map(c => [c.name, c.state, c.port]));
+  if (key === lastSvcKey) return applyFilter();
+  lastSvcKey = key;
+
+  const host = location.hostname;
+  const web = visible.filter(c => c.port).sort((a, b) => a.label.localeCompare(b.label));
+  const rest = visible.filter(c => !c.port).sort((a, b) => a.name.localeCompare(b.name));
+  let html = GROUPS.map(([g, title]) => {
+    const items = web.filter(c => c.group === g);
+    return items.length ? `<div class="group"><h3 class="label">${title}</h3><div class="tiles">${items.map(c => tile(c, host)).join("")}</div></div>` : "";
+  }).join("");
+  if (rest.length) {
+    html += `<div class="group"><h3 class="label">Backends &amp; databases</h3><div class="backends">${rest.map(c => {
+      const up = c.state === "running", bad = c.state === "unhealthy";
+      return `<span class="bk" data-q="${esc((c.label + " " + c.name).toLowerCase())}" title="${esc(c.status)}"><i class="${bad ? "bad" : up ? "up" : ""}"></i>${esc(c.name)}</span>`;
+    }).join("")}</div></div>`;
+  }
+  $("svcBody").innerHTML = html + `<div class="empty" id="noMatch" hidden>No services match.</div>`;
+  applyFilter();
+}
+
+function applyFilter() {
+  const q = $("q").value.trim().toLowerCase();
+  let shown = 0;
+  document.querySelectorAll("#svcBody [data-q]").forEach(el => { el.hidden = !!q && !el.dataset.q.includes(q); if (!el.hidden) shown++; });
+  document.querySelectorAll("#svcBody .group").forEach(g => { g.hidden = !g.querySelector("[data-q]:not([hidden])"); });
+  $("noMatch").hidden = shown > 0;
+  const links = [...document.querySelectorAll("#svcBody a.tile:not([hidden])")];
+  selIndex = Math.min(selIndex, Math.max(links.length - 1, 0));
+  links.forEach((a, i) => a.classList.toggle("sel", !!q && i === selIndex));
+}
+
+$("q").addEventListener("input", () => { selIndex = 0; applyFilter(); });
+$("q").addEventListener("keydown", e => {
+  const links = [...document.querySelectorAll("#svcBody a.tile:not([hidden])")];
+  if (e.key === "ArrowDown" || e.key === "ArrowRight") { selIndex = Math.min(selIndex + 1, links.length - 1); applyFilter(); e.preventDefault(); }
+  else if (e.key === "ArrowUp" || e.key === "ArrowLeft") { selIndex = Math.max(selIndex - 1, 0); applyFilter(); e.preventDefault(); }
+  else if (e.key === "Enter" && links[selIndex]) window.open(links[selIndex].href, "_blank", "noopener");
+  else if (e.key === "Escape") { $("q").value = ""; $("q").blur(); applyFilter(); }
+});
+document.addEventListener("keydown", e => {
+  if ((e.key === "/" || (e.key === "k" && (e.metaKey || e.ctrlKey))) && document.activeElement !== $("q")) { e.preventDefault(); $("q").focus(); }
+});
+document.addEventListener("click", e => { const c = e.target.closest(".copy"); if (c) copy(c.dataset.copy); });
+
+/* ── ASCII banner (figlet "big", rendered by the server) ── */
+let bannerFor = null;
+function setBanner(lines, name) {
+  const key = lines.join("\n");
+  if (key === bannerFor) return;
+  bannerFor = key;
+  const el = $("hostname");
+  el.setAttribute("aria-label", name);
+  el.innerHTML = lines.map(esc).join("\n");
+  sizeRack();
+}
+// match the rack icon to the banner + status line it sits beside
+function sizeRack() {
+  const h = document.querySelector(".brand .text").offsetHeight;
+  if (!h) return;
+  const rack = $("rack");
+  rack.style.height = `${h}px`;
+  rack.style.width = `${Math.round(h * 62 / 72)}px`;
+}
+document.fonts?.ready.then(sizeRack);
+
+/* ── rack ── */
+$("units").innerHTML = [0, 1, 2].map(i => {
+  const y = 8 + i * 19;
+  return `<rect class="unit" x="7" y="${y}" width="48" height="15" rx="3.5"/>
+    <line class="vent" x1="13" x2="13" y1="${y + 4.5}" y2="${y + 10.5}"/>
+    <line class="vent" x1="17" x2="17" y1="${y + 4.5}" y2="${y + 10.5}"/>
+    <line class="vent" x1="21" x2="21" y1="${y + 4.5}" y2="${y + 10.5}"/>
+    <circle class="led act glow ${"abc"[i]}" cx="40" cy="${y + 7.5}" r="2.1" style="color:var(--accent)"/>
+    <circle class="led st glow" cx="48" cy="${y + 7.5}" r="2.1"/>`;
+}).join("");
+
+/* ── theme ── */
+const THEMES = ["auto", "light", "dark"];
+function setTheme(t) {
+  if (t === "auto") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", t);
+  $("themeBtn").textContent = `Theme: ${t}`;
+  try { localStorage.setItem("hp-theme", t); } catch {}
+}
+let theme = "auto"; try { theme = localStorage.getItem("hp-theme") || "auto"; } catch {}
+setTheme(theme);
+$("themeBtn").onclick = () => { theme = THEMES[(THEMES.indexOf(theme) + 1) % 3]; setTheme(theme); };
+
+/* ── render ── */
+let lastOk = 0;
+function render(s) {
+  document.title = s.hostname;
+  setBanner(s.banner_big || [s.hostname], s.hostname);
+  $("osline").textContent = s.os;
+
+  const pcts = [s.memory.pct, s.root.pct];
+  const unhealthy = s.containers.filter(c => c.state === "unhealthy");
+  const exited = s.containers.filter(c => c.state === "exited");
+  const full = s.root.pct >= 85 ? [{ mount: "/", pct: s.root.pct }] : [];
+  const issues = [
+    ...unhealthy.map(c => `${c.name} unhealthy`),
+    ...exited.map(c => `${c.name} exited`),
+    ...full.map(d => `${d.mount} ${d.pct}% full`),
+  ];
+  const hot = unhealthy.length || pcts.some(p => p >= 90) || s.temp >= 85;
+  const warm = issues.length || pcts.some(p => p >= 70) || s.temp >= 70;
+  const h = $("health");
+  h.className = "pill " + (hot ? "bad" : warm ? "warn" : "");
+  $("units").querySelectorAll(".st").forEach(el => el.setAttribute("class", "led st glow " + (hot ? "bad" : warm ? "warn" : "")));
+  // activity LEDs flicker faster as CPU rises
+  $("rack").style.setProperty("--act", `${Math.max(0.18, 1.8 - (s.cpu || 0) / 40).toFixed(2)}s`);
+  h.lastElementChild.textContent = issues.length ? issues.join(" · ") : hot ? "Needs attention" : warm ? "Running warm" : "All systems normal";
+
+  $("cpu").innerHTML = `${s.cpu ?? "–"}<small>%</small>`;
+  $("cpu").style.color = s.cpu >= 70 ? color(level(s.cpu)) : "";
+  drawCpu(s.cpu_history);
+  const hist = s.cpu_history;
+  $("cpuSub").innerHTML = hist.length
+    ? `${Math.round(hist.reduce((a, b) => a + b, 0) / hist.length)}% avg · ${Math.max(...hist)}% peak · ${s.cores} cores${s.top ? ` · <span class="mono">${esc(s.top.split(" (")[0])}</span>` : ""}`
+    : `${s.cores} cores`;
+
+  const m = s.memory, r = s.root;
+  stat($("sMem"), "Memory", m.pct, "%", `${(m.used / 1024).toFixed(1)} / ${Math.round(m.total / 1024)} GB`, m.pct, level(m.pct));
+  stat($("sDisk"), "Disk /", r.pct, "%", `${bytes(r.total - r.used)} free`, r.pct, level(r.pct));
+  if (s.temp != null) {
+    stat($("sTemp"), "CPU temp", s.temp, "°C", s.temp < 70 ? "Cool" : s.temp < 85 ? "Warm" : "Hot",
+      (s.temp - 30) / 65 * 100, tempLevel(s.temp));
+  } else stat($("sTemp"), "CPU temp", "–", "", "No sensor", null);
+  const l1 = +s.load[0];
+  stat($("sLoad"), "Load", s.load[0], "", `${s.load[1]} · ${s.load[2]}`, l1 / s.cores * 100, level(l1 / s.cores * 100));
+  const running = s.containers.filter(c => c.state === "running").length;
+  stat($("sUp"), "Uptime", uptime(s.uptime), "", `${running} containers up`, null);
+
+  const all = [{ mount: "/", used: r.used, total: r.total, pct: r.pct, smb: [] }, ...s.drives];
+  $("drives").innerHTML = all.map(d => `
+    <div class="drive">
+      <div class="row"><span class="name">${esc(d.mount)}</span><span class="pct num" style="color:${d.mount === "/" ? color(level(d.pct)) : "var(--ink)"}">${d.pct}%</span></div>
+      ${meter(d.pct, d.mount === "/" ? level(d.pct) : "accent")}
+      <div class="sub"><span class="num">${bytes(d.used)} of ${bytes(d.total)}</span>
+        <span>${d.smb.length ? d.smb.map(n => `<span class="tag">smb/${esc(n)}</span>`).join(" ") : d.mount === "/" ? "system" : "not shared"}</span></div>
+    </div>`).join("");
+
+  const TRAN = { nvme: "NVMe", usb: "USB", sata: "SATA", sas: "SAS", mmc: "SD" };
+  const um = s.unmounted || [];
+  $("unmounted").innerHTML = um.length ? `<div class="label">Not mounted</div>` + um.map(d => {
+    const what = d.fstype ? `${d.fstype}${d.label ? ` "${d.label}"` : ""}` : (d.state || "no filesystem");
+    const kind = [TRAN[d.tran] || d.tran, what].filter(Boolean).map(esc).join(" · ");
+    const info = [d.model, kind].filter(Boolean).map(esc).join(" · ");
+    return `<div class="um" title="${esc(d.path)} — ${info}">
+      <span class="ico"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 14h.01M11 14h6"/></svg></span>
+      <span class="meta"><div class="top"><span class="name">${esc(d.path.replace("/dev/", ""))}</span><span class="size num">${bytes(d.size)}</span></div>
+      ${d.model ? `<div class="sub">${esc(d.model)}</div>` : ""}<div class="sub">${kind}</div></span></div>`;
+  }).join("") : "";
+
+  const ssh = s.ssh_failures;
+  const ip = v => v ? `<span class="copy mono" data-copy="${esc(v)}" title="Click to copy">${esc(v)}</span>` : "—";
+  const net = s.net, ts = s.tailscale, up = s.updates, rb = s.reboot_required;
+  const booted = new Date((s.time - s.uptime) * 1000);
+  const rate = n => {
+    if (n == null) return "–";
+    const u = ["B", "KB", "MB", "GB"]; let i = 0;
+    while (n >= 1000 && i < u.length - 1) { n /= 1024; i++; }
+    return `${n < 10 && i ? n.toFixed(1) : Math.round(n)} ${u[i]}/s`;
+  };
+  const section = (title, rows) => `<h4>${title}</h4><dl class="facts">${rows.filter(Boolean)
+    .map(([k, v, t]) => `<dt>${k}</dt><dd class="num"${t ? ` title="${esc(t)}"` : ""}>${v}</dd>`).join("")}</dl>`;
+  $("facts").innerHTML = [
+    section("Host", [
+      ["CPU", esc((s.cpu_model || "").replace(/^Intel |^AMD /, "")), s.cpu_model],
+      ["Kernel", `<span class="mono">${esc(s.kernel.replace(/-generic$/, ""))}</span>`, s.kernel],
+      s.docker_version && ["Docker", `<span class="mono">${esc(s.docker_version)}</span>`],
+      ["Booted", booted.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })],
+      ["Clock", s.ntp == null ? "—" : s.ntp ? `<span class="ok">NTP synced</span>` : `<span class="warn">not synced</span>`],
+    ]),
+    section(`Network${net ? ` <small>${esc(net.iface)}${net.speed ? ` · ${net.speed >= 1000 ? net.speed / 1000 + " Gb/s" : net.speed + " Mb/s"}` : ""}</small>` : ""}`, [
+      net && ["Traffic", `<span class="rate"><span><i>↓</i> <b>${rate(net.rate?.rx)}</b></span><span><i>↑</i> <b>${rate(net.rate?.tx)}</b></span></span>`],
+      ["LAN", ip(s.lan_ip)],
+      ["Tailscale", ip(s.tailscale_ip)],
+      ts && ["Tailnet", ts.state === "Running" ? `${ts.online} of ${ts.peers} peers online` : `<span class="warn">${esc(ts.state)}</span>`],
+    ]),
+    section("Security &amp; updates", [
+      ["Firewall", s.firewall ? `<span class="${s.firewall === "active" ? "ok" : "warn"}">ufw ${esc(s.firewall)}</span>` : "—"],
+      ["SSH failures 24h", ssh == null ? "—" : `<span class="${ssh > 100 ? "bad" : ssh > 20 ? "warn" : "ok"}">${ssh}</span>`],
+      ["Open ports", s.ports],
+      ["Logged in", s.users == null ? "—" : s.users === 0 ? "nobody" : `${s.users} user${s.users > 1 ? "s" : ""}`],
+      up && ["Updates", up.total === 0 ? `<span class="ok">up to date</span>`
+        : `<span class="${up.security ? "warn" : ""}">${up.total} pending${up.security ? ` · ${up.security} security` : ""}</span>`],
+      ["Reboot", rb ? `<span class="warn">required</span>` : `<span class="ok">not needed</span>`, rb && rb.length ? rb.join(", ") : ""],
+    ]),
+  ].join("");
+
+  renderServices(s.containers);
+  const shape = [lastSvcKey, s.drives.length, um.length, h.textContent].join("|");
+  if (shape !== lastShape) { lastShape = shape; refit(); }
+}
+let lastShape = "";
+
+async function poll() {
+  try {
+    const res = await fetch("/api/stats", { cache: "no-store" });
+    const s = await res.json(); lastOk = Date.now(); render(s);
+  } catch {}
+}
+function tick() {
+  const d = new Date();
+  $("time").textContent = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  $("date").textContent = d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  const age = lastOk ? Math.round((Date.now() - lastOk) / 1000) : null;
+  $("updated").textContent = age == null ? "Connecting…" : age > 20 ? `Disconnected · last update ${age}s ago` : "Live · updates every 5s";
+  $("updated").style.color = age > 20 ? "var(--bad)" : "";
+}
+/* ── tabs (phones/tablets) ── */
+$("tabs").addEventListener("click", e => {
+  const b = e.target.closest("button[data-tab]"); if (!b) return;
+  $("main").dataset.tab = b.dataset.tab;
+  $("tabs").querySelectorAll("button").forEach(x => x.setAttribute("aria-selected", x === b));
+});
+
+// shrink the banner block further if it is still wider than a narrow screen
+function fitBrand() {
+  const brand = document.querySelector(".brand");
+  brand.style.zoom = "";
+  const avail = document.querySelector(".top").clientWidth;
+  if (brand.scrollWidth > avail) brand.style.zoom = (0.85 * avail / brand.scrollWidth).toFixed(3);
+}
+
+/* ── fit to window ──
+   Scale the whole layout so it exactly fills the viewport: no inner scrollbars on
+   small Windows laptops (125–150% display scaling), no empty space on big monitors. */
+const LOCK = matchMedia("(min-width: 1001px) and (min-height: 480px)");
+const ZMIN = 0.65, ZMAX = 1.25;
+let zoom = 1;
+function applyZoom(z) {
+  document.body.style.zoom = z;
+  document.body.style.height = LOCK.matches ? `${innerHeight / z}px` : "";
+}
+function overflows() {
+  const de = document.documentElement;
+  if (de.scrollHeight > innerHeight) return true;
+  return [...document.querySelectorAll(".svc-body, .side")].some(el => el.scrollHeight > el.clientHeight);
+}
+function fit() {
+  fitBrand();
+  if (!LOCK.matches) { zoom = 1; applyZoom(1); return; }
+  let lo = ZMIN, hi = ZMAX;
+  applyZoom(hi);
+  if (!overflows()) { zoom = hi; return; }
+  for (let i = 0; i < 9; i++) {
+    const mid = (lo + hi) / 2;
+    applyZoom(mid);
+    if (overflows()) hi = mid; else lo = mid;
+  }
+  zoom = Math.floor(lo * 100) / 100;
+  applyZoom(zoom);
+}
+let fitTimer;
+const refit = () => { clearTimeout(fitTimer); fitTimer = setTimeout(fit, 60); };
+addEventListener("resize", refit);
+document.fonts?.ready.then(refit);
+
+poll(); setInterval(poll, 5000);
+tick(); setInterval(tick, 1000);
+</script>
+</body>
+</html>

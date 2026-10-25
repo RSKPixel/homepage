@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>homeserver</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%230c0e14'/><text x='3' y='12' font-family='monospace' font-size='10' fill='%2300d7ff'>&gt;_</text></svg>">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #07080c;
+    --win: #0c0e14;
+    --bar: #151821;
+    --line: #1f2330;
+    --fg: #c5c8d0;      /* \033[0;37m */
+    --dim: #5c6370;     /* \033[0;90m */
+    --cyan: #56d4f5;    /* \033[1;36m */
+    --green: #6bd968;   /* \033[1;32m */
+    --yellow: #e5c07b;  /* \033[1;33m */
+    --red: #ef596f;     /* \033[1;31m */
+    --b1: #00ffff; --b2: #00afff; --b3: #5f5fff; --b4: #af5fff; /* figlet 256-color rows */
+    --mono: "JetBrains Mono", "SF Mono", "Cascadia Code", Menlo, Consolas, ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); }
+  body {
+    font: 14px/1.5 var(--mono);
+    color: var(--fg);
+    background:
+      radial-gradient(1200px 600px at 20% -10%, #0f2a3a55, transparent 60%),
+      radial-gradient(900px 500px at 110% 10%, #2a1a4a44, transparent 60%),
+      var(--bg);
+  }
+  a { color: inherit; text-decoration: none; }
+
+  .screen {
+    min-height: 100vh;
+    padding: clamp(20px, 4vw, 56px) clamp(16px, 5vw, 72px);
+    display: flex; flex-direction: column;
+  }
+  .muted { color: var(--dim); }
+  .c { color: var(--cyan); font-weight: 700; }
+  .g { color: var(--green); } .y { color: var(--yellow); } .r { color: var(--red); }
+  .w { color: var(--fg); }
+
+  pre.banner {
+    margin: 0; font: 700 14px/1.2 var(--mono);
+    overflow-x: auto; white-space: pre;
+  }
+  pre.banner span { display: block; padding-left: 2ch; }
+  pre.banner span:nth-child(4n+1) { color: var(--b1); }
+  pre.banner span:nth-child(4n+2) { color: var(--b2); }
+  pre.banner span:nth-child(4n+3) { color: var(--b3); }
+  pre.banner span:nth-child(4n+4) { color: var(--b4); }
+  .dateline { padding-left: 2ch; margin: 2px 0 18px; }
+
+  .grid {
+    flex: 1; align-content: start;
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: 6px clamp(32px, 5vw, 80px);
+  }
+  #services { columns: 2 30ch; column-gap: 48px; }
+  .svc-group { break-inside: avoid; }
+  @media (max-width: 960px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
+  .kv { display: grid; grid-template-columns: 13ch minmax(0, 1fr); padding-left: 2ch; }
+  .kv > div { padding: 1px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .section { margin: 18px 0 4px 2ch; }
+
+  .bar { letter-spacing: -1px; }
+  .bar .empty { color: #262a36; }
+  .spark { color: var(--cyan); opacity: .85; letter-spacing: -1px; }
+
+  .drive { display: grid; grid-template-columns: 15ch 5ch 1fr; gap: 0 1ch; padding: 1px 0 1px 2ch; white-space: nowrap; }
+  .drive .meta { overflow: hidden; text-overflow: ellipsis; }
+
+  .svc-group { margin-bottom: 6px; }
+  .svc {
+    display: grid; grid-template-columns: 2ch minmax(0, 1fr) auto 2ch;
+    gap: 0 1ch; padding: 1px 6px 1px calc(2ch - 6px); margin-left: 0;
+    border-radius: 4px; white-space: nowrap;
+  }
+  .svc .name { overflow: hidden; text-overflow: ellipsis; }
+  .svc .go { color: var(--dim); text-align: right; }
+  a.svc:hover, a.svc.sel { background: #56d4f514; }
+  a.svc:hover .name, a.svc.sel .name { color: var(--cyan); }
+  a.svc:hover .go, a.svc.sel .go { color: var(--cyan); }
+  .svc.off .name { color: var(--dim); }
+  .svc[hidden] { display: none !important; }
+
+  .alerts { padding-left: 2ch; margin-top: 10px; }
+
+  .prompt { margin-top: 22px; display: flex; align-items: center; white-space: nowrap; }
+  .prompt .user { color: var(--green); font-weight: 700; }
+  .prompt .path { color: #5f87ff; font-weight: 700; }
+  .prompt input {
+    flex: 1; min-width: 0; background: none; border: 0; outline: 0;
+    font: inherit; color: var(--fg); caret-color: var(--fg); padding: 0 0 0 1ch;
+  }
+  .prompt input::placeholder { color: #3a3f4d; }
+  .stale { color: var(--red); }
+</style>
+</head>
+<body>
+<main class="screen">
+    <pre class="banner" id="banner"></pre>
+    <div class="dateline"><span class="muted">── </span><span id="date"></span><span class="muted"> ──────────────────</span> <span id="stale" class="stale"></span></div>
+
+    <div class="grid">
+      <section>
+        <div class="kv" id="system"></div>
+        <div class="section c">Drives</div>
+        <div id="drives"></div>
+        <div class="alerts" id="alerts"></div>
+      </section>
+      <section id="services"></section>
+    </div>
+
+    <label class="prompt">
+      <span class="user" id="who">saravanakumar@homeserver</span>:<span class="path">~</span>$
+      <input id="q" autocomplete="off" spellcheck="false" placeholder="type to filter services, enter to open" autofocus>
+    </label>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]));
+const pctClass = p => p < 70 ? "g" : p < 90 ? "y" : "r";
+const tempClass = t => t < 70 ? "g" : t < 85 ? "y" : "r";
+
+function bytes(n) {
+  const u = ["B","K","M","G","T","P"]; let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return (n >= 10 || i === 0 ? Math.round(n) : n.toFixed(1)) + u[i];
+}
+function uptime(s) {
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60);
+  const p = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  return [d && p(d, "day"), h && p(h, "hour"), p(m, "minute")].filter(Boolean).join(", ");
+}
+function bar(p, width = 20) {
+  const full = Math.round(p / 100 * width);
+  return `<span class="bar"><span class="${pctClass(p)}">${"█".repeat(full)}</span><span class="empty">${"█".repeat(width - full)}</span></span>`;
+}
+function spark(vals) {
+  const ticks = "▁▂▃▄▅▆▇█";
+  return vals.slice(-24).map(v => ticks[Math.min(7, Math.floor(v / 12.5))]).join("");
+}
+function fmtDate(d) {
+  const day = d.toLocaleDateString("en-GB", { weekday: "short", day: "2-digit", month: "short", year: "numeric" }).replace(",", "");
+  const t = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return `${day} • ${t}`;
+}
+
+let state = null, lastOk = 0, selIndex = 0;
+
+function renderSystem(s) {
+  const m = s.memory, r = s.root;
+  const running = s.containers.filter(c => c.state === "running").length;
+  const rows = [
+    ["OS", esc(s.os)],
+    ["Kernel", esc(s.kernel)],
+    ["Uptime", uptime(s.uptime)],
+    ["IP", esc(s.lan_ip || "unavailable")],
+    ["Tailscale", esc(s.tailscale_ip || "unavailable")],
+    ["Load", `${s.load.join(" ")} <span class="muted">(${s.cores} cores)</span>`],
+    ["CPU", s.cpu == null ? "…" : `<span class="${pctClass(s.cpu)}">${String(s.cpu).padStart(3)}%</span> <span class="spark">${spark(s.cpu_history)}</span>`],
+    ["Memory", `<span class="${pctClass(m.pct)}">${String(m.pct).padStart(3)}%</span> ${bar(m.pct)} <span class="muted">${m.used} / ${m.total} MB</span>`],
+    ["Disk /", `<span class="${pctClass(r.pct)}">${String(r.pct).padStart(3)}%</span> ${bar(r.pct)} <span class="muted">${bytes(r.used)} / ${bytes(r.total)}</span>`],
+  ];
+  if (m.swap_total) rows.push(["Swap", `<span class="${pctClass(m.swap_pct)}">${String(m.swap_pct).padStart(3)}%</span> <span class="muted">of ${m.swap_total} MB</span>`]);
+  rows.push(
+    ["Docker", `${running} running <span class="muted">/ ${s.containers.length} total</span>`],
+    ["CPU temp", s.temp == null ? "n/a" : `<span class="${tempClass(s.temp)}">${s.temp}°C</span>`],
+    ["Top proc", esc(s.top || "n/a")],
+    ["Ports", `${s.ports} listening`],
+    ["Security", s.ssh_failures == null ? "n/a" : `<span class="${s.ssh_failures > 100 ? "r" : s.ssh_failures > 20 ? "y" : "g"}">${s.ssh_failures} failed SSH logins (24h)</span>`],
+    ["Firewall", s.firewall ? `<span class="${s.firewall === "active" ? "w" : "y"}">ufw ${esc(s.firewall)}</span>` : "n/a"],
+  );
+  $("system").innerHTML = rows.map(([k, v]) => `<div class="c">${k}</div><div>${v}</div>`).join("");
+}
+
+function renderDrives(s) {
+  $("drives").innerHTML = s.drives.length ? s.drives.map(d => `
+    <div class="drive">
+      <span>${esc(d.mount)}</span>
+      <span class="${pctClass(d.pct)}">${String(d.pct).padStart(3)}%</span>
+      <span class="meta">${bar(d.pct, 12)} ${bytes(d.used)} / ${bytes(d.total)} ${d.smb.length ? `SMB: ${esc(d.smb.join(", "))}` : `<span class="muted">not shared</span>`}</span>
+    </div>`).join("") : `<div class="drive muted">no drives under /mnt</div>`;
+}
+
+function renderAlerts(s) {
+  const unhealthy = s.containers.filter(c => c.state === "unhealthy");
+  const exited = s.containers.filter(c => c.state === "exited");
+  const out = [];
+  if (unhealthy.length) out.push(`<div class="r">⚠  ${unhealthy.length} unhealthy: ${esc(unhealthy.map(c => c.name).join(", "))}</div>`);
+  if (exited.length) out.push(`<div class="y">⚠  ${exited.length} exited: ${esc(exited.map(c => c.name).join(", "))}</div>`);
+  $("alerts").innerHTML = out.join("");
+}
+
+const GROUPS = [["media", "Media"], ["infra", "Infrastructure"], ["apps", "Apps"], ["other", "Backends &amp; databases"]];
+
+function renderServices(s) {
+  const host = location.hostname;
+  const visible = s.containers.filter(c => !c.hidden);
+  $("services").innerHTML = GROUPS.map(([key, title]) => {
+    const items = visible.filter(c => c.group === key).sort((a, b) => a.label.localeCompare(b.label));
+    if (!items.length) return "";
+    return `<div class="svc-group"><div class="section c" style="margin-top:0">${title}</div>` + items.map(c => {
+      const up = c.state === "running", bad = c.state === "unhealthy";
+      const dot = `<span class="${bad ? "r" : up ? "g" : "muted"}">${up || bad ? "●" : "○"}</span>`;
+      const port = c.port ? `<span class="muted">:${c.port}</span>` : `<span class="muted">${esc(c.state)}</span>`;
+      const inner = `${dot}<span class="name">${esc(c.label)}</span>${port}<span class="go">${c.port ? "↗" : ""}</span>`;
+      const data = `data-q="${esc((c.label + " " + c.name).toLowerCase())}" title="${esc(c.name + " — " + c.status)}"`;
+      return c.port
+        ? `<a class="svc${up ? "" : " off"}" href="${c.scheme}://${host}:${c.port}/" target="_blank" rel="noopener" ${data}>${inner}</a>`
+        : `<div class="svc off" ${data}>${inner}</div>`;
+    }).join("") + `</div>`;
+  }).join("");
+  applyFilter();
+}
+
+function applyFilter() {
+  const q = $("q").value.trim().toLowerCase();
+  document.querySelectorAll("#services .svc").forEach(el => { el.hidden = q && !el.dataset.q.includes(q); });
+  document.querySelectorAll("#services .svc-group").forEach(g => { g.hidden = !g.querySelector(".svc:not([hidden])"); });
+  const links = [...document.querySelectorAll("#services a.svc:not([hidden])")];
+  selIndex = Math.min(selIndex, Math.max(links.length - 1, 0));
+  links.forEach((a, i) => a.classList.toggle("sel", !!q && i === selIndex));
+}
+
+$("q").addEventListener("input", () => { selIndex = 0; applyFilter(); });
+$("q").addEventListener("keydown", e => {
+  const links = [...document.querySelectorAll("#services a.svc:not([hidden])")];
+  if (e.key === "ArrowDown") { selIndex = Math.min(selIndex + 1, links.length - 1); applyFilter(); e.preventDefault(); }
+  else if (e.key === "ArrowUp") { selIndex = Math.max(selIndex - 1, 0); applyFilter(); e.preventDefault(); }
+  else if (e.key === "Enter" && $("q").value.trim() && links[selIndex]) { window.open(links[selIndex].href, "_blank", "noopener"); }
+  else if (e.key === "Escape") { $("q").value = ""; applyFilter(); }
+});
+
+function render(s) {
+  document.title = s.hostname;
+  $("who").textContent = `saravanakumar@${s.hostname}`;
+  if (!$("banner").childElementCount) $("banner").innerHTML = s.banner.map(l => `<span>${esc(l)}</span>`).join("");
+  renderSystem(s); renderDrives(s); renderAlerts(s); renderServices(s);
+}
+
+async function poll() {
+  try {
+    const res = await fetch("/api/stats", { cache: "no-store" });
+    state = await res.json(); lastOk = Date.now();
+    render(state);
+  } catch { /* keep last render; staleness shown below */ }
+}
+
+function tick() {
+  $("date").textContent = fmtDate(new Date());
+  $("stale").textContent = lastOk && Date.now() - lastOk > 20000 ? "[disconnected]" : "";
+}
+
+poll(); setInterval(poll, 5000);
+tick(); setInterval(tick, 1000);
+</script>
+</body>
+</html>
