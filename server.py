@@ -47,6 +47,8 @@ SERVICES = {
     "yorapet3-api": {"label": "YoraPet3 API", "group": "apps"},
     "tallysync-docker-frontend-1": {"label": "TallySync", "group": "apps"},
     "yoratrader-docker-frontend-1": {"label": "YoraTrader", "group": "apps"},
+    # production container uses host networking, so docker reports no port for it
+    "homepage": {"label": "Homepage", "group": "apps", "port": 8088},
 }
 # Host ports that aren't web UIs.
 NON_WEB_PORTS = {22, 53, 3306, 5432, 6379, 6881}
