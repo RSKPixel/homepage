@@ -62,13 +62,18 @@ def run(cmd, timeout=5):
 
 
 class Cached:
-    """Re-run a slow probe at most once per `ttl` seconds."""
+    """Re-run a slow probe at most once per `ttl` seconds.
 
-    def __init__(self, fn, ttl):
-        self.fn, self.ttl, self.value, self.at = fn, ttl, None, 0.0
+    An empty result is retried after `retry` seconds instead, so values that
+    aren't ready yet at boot (network, Tailscale, Docker) show up quickly.
+    """
+
+    def __init__(self, fn, ttl, retry=15):
+        self.fn, self.ttl, self.retry, self.value, self.at = fn, ttl, retry, None, 0.0
 
     def get(self):
-        if time.monotonic() - self.at > self.ttl:
+        ttl = self.ttl if self.value not in (None, "", [], {}) else self.retry
+        if time.monotonic() - self.at > ttl:
             try:
                 self.value = self.fn()
             except Exception:  # a broken probe shouldn't take the page down
