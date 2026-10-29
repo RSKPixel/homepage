@@ -9,6 +9,7 @@ import os
 import platform
 import shutil
 import socket
+import struct
 import subprocess
 import threading
 import time
@@ -28,6 +29,20 @@ HOST_ROOT = os.environ.get("HOST_ROOT", "")
 def host(path):
     """Path on the host, whether we run on it directly or inside the container."""
     return HOST_ROOT.rstrip("/") + path if HOST_ROOT else path
+
+
+# The container has its own network namespace; the host's is visible through its
+# init process (the compose file shares the host PID namespace).
+NET = Path(host("/proc/1/net")) if HOST_ROOT else Path("/proc/net")
+
+
+def hostname():
+    if HOST_ROOT:
+        try:
+            return Path(host("/etc/hostname")).read_text().strip() or socket.gethostname()
+        except OSError:
+            pass
+    return socket.gethostname()
 
 
 # Friendly labels for containers. Anything not listed falls back to its name.
@@ -93,20 +108,51 @@ def os_name():
 
 def banner(font="smslant"):
     if shutil.which("figlet"):
-        out = run(["figlet", "-f", font, "-w", "200", socket.gethostname()])
+        out = run(["figlet", "-f", font, "-w", "200", hostname()])
         lines = [l.rstrip() for l in out.splitlines() if l.strip()]
         if lines:
             return lines
-    return [socket.gethostname()]
+    return [hostname()]
+
+
+def _ip4(hexval):
+    """/proc/net/route stores addresses as little-endian hex."""
+    return int(hexval, 16)
+
+
+def _ip4_from_str(ip):
+    return struct.unpack("<I", socket.inet_aton(ip))[0]
 
 
 def lan_ip():
+    if HOST_ROOT:
+        return host_lan_ip()
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
         try:
             s.connect(("1.1.1.1", 80))
             return s.getsockname()[0]
         except OSError:
             return None
+
+
+def host_lan_ip():
+    """The host's address on its default-route interface, from the host's route table."""
+    rows = [l.split() for l in (NET / "route").read_text().splitlines()[1:]]
+    iface = default_iface()
+    subnets = [(_ip4(r[1]), _ip4(r[7])) for r in rows
+               if r[0] == iface and r[2] == "00000000" and r[1] != "00000000"]
+    local, ip = set(), None
+    for line in (NET / "fib_trie").read_text().splitlines():
+        line = line.strip()
+        if line.startswith("|--"):
+            ip = line.split()[1]
+        elif line.startswith("/32 host LOCAL") and ip:
+            local.add(ip)
+    for addr in sorted(local):
+        n = _ip4_from_str(addr)
+        if any(n & mask == dest for dest, mask in subnets):
+            return addr
+    return None
 
 
 def tailscale_cmd(*args):
@@ -170,7 +216,14 @@ def cpu_percent():
 
 
 def listening_ports():
-    return max(len(run(["ss", "-tln"]).splitlines()) - 1, 0)
+    # same count as `ss -tln`: TCP sockets in LISTEN state (0A), IPv4 and IPv6
+    count = 0
+    for name in ("tcp", "tcp6"):
+        try:
+            count += sum(1 for l in (NET / name).read_text().splitlines()[1:] if l.split()[3] == "0A")
+        except OSError:
+            pass
+    return count
 
 
 def ssh_failures():
@@ -244,7 +297,7 @@ def cpu_model():
 
 
 def default_iface():
-    for line in Path("/proc/net/route").read_text().splitlines()[1:]:
+    for line in (NET / "route").read_text().splitlines()[1:]:
         f = line.split()
         if f[1] == "00000000":
             return f[0]
@@ -261,7 +314,7 @@ def network():
     if not iface:
         return None
     rx = tx = 0
-    for line in Path("/proc/net/dev").read_text().splitlines()[2:]:
+    for line in (NET / "dev").read_text().splitlines()[2:]:
         name, data = line.split(":", 1)
         if name.strip() == iface:
             f = data.split()
@@ -273,7 +326,7 @@ def network():
         dt = now - prev[3]
         rate = {"rx": max(rx - prev[1], 0) / dt, "tx": max(tx - prev[2], 0) / dt}
     try:
-        speed = int(Path(f"/sys/class/net/{iface}/speed").read_text())
+        speed = int(Path(host(f"/sys/class/net/{iface}/speed")).read_text())
     except (OSError, ValueError):
         speed = None
     return {"iface": iface, "speed": speed if speed and speed > 0 else None, "rate": rate}
@@ -431,7 +484,7 @@ def containers():
 # ── collector ──────────────────────────────────────────────────────────────
 
 static = {
-    "hostname": socket.gethostname(),
+    "hostname": hostname(),
     "os": os_name(),
     "kernel": platform.release(),
     "cores": os.cpu_count(),

@@ -6,11 +6,11 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# python3 (server), figlet (banner), iproute2 (ss), procps (ps),
-# util-linux (findmnt, lsblk), systemd (journalctl, timedatectl, loginctl)
+# python3 (server), figlet (banner), procps (ps),
+# util-linux (findmnt, lsblk), systemd (journalctl)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        python3 figlet iproute2 procps util-linux systemd ca-certificates \
+        python3 figlet procps util-linux systemd ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # docker CLI only; talks to the host daemon through the mounted socket
