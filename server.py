@@ -4,6 +4,7 @@
 Stdlib only. Serves index.html and /api/stats (JSON). Stats are collected by a
 background thread so page requests never block on slow commands.
 """
+import ipaddress
 import json
 import os
 import platform
@@ -560,6 +561,31 @@ def collector_loop():
         time.sleep(INTERVAL)
 
 
+TAILNET = ipaddress.ip_network("100.64.0.0/10")  # Tailscale's address range
+
+
+def classify_client(headers, peer):
+    """How this request reached us: through the Cloudflare tunnel, Tailscale, the LAN, or locally."""
+    cf_ip = headers.get("CF-Connecting-IP")
+    if cf_ip:  # cloudflared forwards the visitor's real IP in this header
+        return {"via": "internet", "ip": cf_ip, "country": headers.get("CF-IPCountry")}
+    try:
+        addr = ipaddress.ip_address(peer)
+        if addr.version == 6 and addr.ipv4_mapped:
+            addr = addr.ipv4_mapped
+    except ValueError:
+        return {"via": None, "ip": peer}
+    if addr in TAILNET:
+        via = "tailscale"
+    elif addr.is_loopback:
+        via = "local"
+    elif addr.is_private:
+        via = "lan"
+    else:
+        via = "internet"
+    return {"via": via, "ip": str(addr)}
+
+
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT / "public"), **kwargs)
@@ -567,7 +593,8 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path.split("?")[0] == "/api/stats":
             with lock:
-                body = json.dumps(snapshot).encode()
+                data = {**snapshot, "client": classify_client(self.headers, self.client_address[0])}
+            body = json.dumps(data).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Cache-Control", "no-store")
